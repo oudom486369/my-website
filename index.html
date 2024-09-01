@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>远方的人们在怎么生活</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+        header {
+            background-color: #4a4a4a;
+            color: white;
+            text-align: center;
+            padding: 1em;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+        #map-container {
+            position: absolute;
+            top: 3em;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        #media-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+            background-color: rgba(35, 34, 34, 0.95);
+            color: white;
+            display: none;
+            overflow-y: auto;
+            box-sizing: border-box;
+            padding: 20px;
+        }
+        #media-container {
+            width: 100%;
+            height: 70%;
+            position: relative;
+            overflow: hidden;
+        }
+        #media-container img, #media-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        #location {
+            font-size: 24px;
+            text-align: center;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #caption {
+            margin-top: 10px;
+            font-size: 14px;
+            text-align: left;
+        }
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: rgba(255, 255, 255, 0.5);
+            color: black;
+            padding: 10px;
+            text-decoration: none;
+            font-size: 18px;
+        }
+        #prev-button { left: 10px; }
+        #next-button { right: 10px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>远方的人们在怎么生活</h1>
+    </header>
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="media-panel">
+            <div id="media-container">
+                <img id="media" src="" alt="Media">
+                <a href="#" id="prev-button" class="nav-button">&lt;</a>
+                <a href="#" id="next-button" class="nav-button">&gt;</a>
+            </div>
+            <h2 id="location"></h2>
+            <p id="caption"></p>
+        </div>
+    </div>
+    <script>
+        var map = L.map('map', {
+            minZoom: 4
+        }).setView([35.86166, 104.195397], 4);
+        
+        var tileLayer = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+            subdomains: '1234',
+            attribution: '© <a href="https://www.autonavi.com/">高德地图</a>',
+            opacity: 0.5
+        }).addTo(map);
+        
+        var currentPlace;
+        var currentMediaIndex;
+
+        function updateMedia() {
+            var mediaItem = currentPlace.media[currentMediaIndex];
+            var mediaElement = document.getElementById('media');
+            
+            if (mediaItem.type === 'image') {
+                mediaElement.outerHTML = `<img id="media" src="${mediaItem.url}" alt="${mediaItem.caption}">`;
+            } else if (mediaItem.type === 'video') {
+                mediaElement.outerHTML = `<video id="media" src="${mediaItem.url}" controls></video>`;
+            }
+            
+            document.getElementById('location').innerText = currentPlace.name;
+            document.getElementById('caption').innerText = mediaItem.caption;
+        }
+
+        function showNextMedia() {
+            currentMediaIndex = (currentMediaIndex + 1) % currentPlace.media.length;
+            updateMedia();
+        }
+
+        function showPrevMedia() {
+            currentMediaIndex = (currentMediaIndex - 1 + currentPlace.media.length) % currentPlace.media.length;
+            updateMedia();
+        }
+
+        function loadPlaces() {
+            fetch('/api/places')
+                .then(response => response.json())
+                .then(places => {
+                    places.forEach(function(place) {
+                        var marker = L.marker([place.lat, place.lng], {
+                            icon: L.icon({
+                                iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            })
+                        }).addTo(map);
+                        
+                        marker.on('click', function() {
+                            currentPlace = place;
+                            currentMediaIndex = 0;
+                            updateMedia();
+                            document.getElementById('media-panel').style.display = 'block';
+                            
+                            // 计算新的地图中心点，使标记位于左侧三分之一处
+                            var newCenter = map.project(marker.getLatLng());
+                            newCenter.x += map.getSize().x * (1/6);  // 向右移动1/6宽度
+                            map.panTo(map.unproject(newCenter), {animate: true});
+                        });
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        map.on('click', function() {
+            document.getElementById('media-panel').style.display = 'none';
+        });
+
+        document.getElementById('next-button').addEventListener('click', function(e) {
+            e.preventDefault();
+            showNextMedia();
+        });
+
+        document.getElementById('prev-button').addEventListener('click', function(e) {
+            e.preventDefault();
+            showPrevMedia();
+        });
+
+        loadPlaces();
+    </script>
+</body>
+</html>

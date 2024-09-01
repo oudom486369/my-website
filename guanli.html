@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理界面 - 远方的人们在怎么生活</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css" />
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+        #form-container {
+            padding: 20px;
+        }
+        input, textarea {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        #password-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #password-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="password-modal">
+        <div id="password-form">
+            <input type="password" id="password-input" placeholder="请输入密码">
+            <button onclick="checkPassword()">登录</button>
+        </div>
+    </div>
+
+    <div id="admin-content" style="display: none;">
+        <div id="map"></div>
+        <div id="form-container">
+            <h2>添加新地点</h2>
+            <input type="text" id="place-name" placeholder="地点名称">
+            <input type="text" id="lat" placeholder="纬度" readonly>
+            <input type="text" id="lng" placeholder="经度" readonly>
+            <h3>添加媒体</h3>
+            <select id="media-type">
+                <option value="image">图片</option>
+                <option value="video">视频</option>
+            </select>
+            <input type="text" id="media-url" placeholder="媒体URL">
+            <textarea id="media-caption" placeholder="描述"></textarea>
+            <button onclick="addMedia()">添加媒体</button>
+            <div id="media-list"></div>
+            <button onclick="savePlace()">保存地点</button>
+        </div>
+    </div>
+
+    <script>
+        let map;
+        let marker;
+        let mediaItems = [];
+
+        function checkPassword() {
+            const password = document.getElementById('password-input').value;
+            if (password === '111yigeren') { // 请替换为您的安全密码
+                document.getElementById('password-modal').style.display = 'none';
+                document.getElementById('admin-content').style.display = 'block';
+                initMap();
+            } else {
+                alert('密码错误');
+            }
+        }
+
+        function initMap() {
+            map = L.map('map').setView([35.86166, 104.195397], 4);
+            L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                subdomains: '1234',
+                attribution: '© 高德地图'
+            }).addTo(map);
+
+            map.on('click', function(e) {
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+                marker = L.marker(e.latlng).addTo(map);
+                document.getElementById('lat').value = e.latlng.lat.toFixed(4);
+                document.getElementById('lng').value = e.latlng.lng.toFixed(4);
+            });
+        }
+
+        function addMedia() {
+            const type = document.getElementById('media-type').value;
+            const url = document.getElementById('media-url').value;
+            const caption = document.getElementById('media-caption').value;
+            
+            if (url && caption) {
+                mediaItems.push({ type, url, caption });
+                updateMediaList();
+                document.getElementById('media-url').value = '';
+                document.getElementById('media-caption').value = '';
+            } else {
+                alert('请填写媒体URL和描述');
+            }
+        }
+
+        function updateMediaList() {
+            const list = document.getElementById('media-list');
+            list.innerHTML = '';
+            mediaItems.forEach((item, index) => {
+                list.innerHTML += `<div>${item.type}: ${item.url} <button onclick="removeMedia(${index})">删除</button></div>`;
+            });
+        }
+
+        function removeMedia(index) {
+            mediaItems.splice(index, 1);
+            updateMediaList();
+        }
+
+        function savePlace() {
+            const name = document.getElementById('place-name').value;
+            const lat = parseFloat(document.getElementById('lat').value);
+            const lng = parseFloat(document.getElementById('lng').value);
+
+            if (name && !isNaN(lat) && !isNaN(lng) && mediaItems.length > 0) {
+                const newPlace = { name, lat, lng, media: mediaItems };
+
+                fetch('/api/places', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(newPlace)
+                })
+                .then(response => response.text())
+                .then(message => {
+                    alert(message);
+                    resetForm();
+                })
+                .catch(error => console.error('Error:', error));
+            } else {
+                alert('请填写所有必要信息并至少添加一个媒体项');
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('place-name').value = '';
+            document.getElementById('lat').value = '';
+            document.getElementById('lng').value = '';
+            mediaItems = [];
+            updateMediaList();
+            if (marker) {
+                map.removeLayer(marker);
+            }
+        }
+    </script>
+</body>
+</html>
